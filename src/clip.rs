@@ -137,7 +137,8 @@ impl AudioClip {
         }
     }
 
-    pub fn sample_position(&self, position: f64) -> Option<Frame> {
+    pub fn sample_f64(&self, position: f64) -> Option<Frame> {
+        let position = position * self.0.sample_rate as f64;
         let actual_index = position as usize;
         if let Some(frame) = self.0.frames.get(actual_index) {
             let next_frame = self.0.frames.get(actual_index + 1).unwrap_or(frame);
