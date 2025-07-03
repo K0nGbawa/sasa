@@ -54,7 +54,7 @@ impl Mul<f32> for Frame {
     }
 }
 
-const LATENCY_RECORD_NUM: usize = 64;
+const LATENCY_RECORD_NUM: usize = 640;
 
 pub struct LatencyRecorder {
     records: [f32; LATENCY_RECORD_NUM],
