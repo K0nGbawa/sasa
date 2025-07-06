@@ -1,10 +1,10 @@
-pub use oboe::{PerformanceMode, Usage};
+pub use oboe::{PerformanceMode, SharingMode, Usage};
 
 use super::{BackendSetup, StateCell};
 use crate::Backend;
 use anyhow::Result;
 use oboe::{
-    AudioFormat, AudioOutputCallback, AudioOutputStreamSafe, AudioStream, AudioStreamAsync, AudioStreamBuilder, DataCallbackResult, Output, SharingMode, Stereo, Unspecified
+    AudioFormat, AudioOutputCallback, AudioOutputStreamSafe, AudioStream, AudioStreamAsync, AudioStreamBuilder, DataCallbackResult, Output, Stereo, Unspecified
 };
 use std::sync::{
     atomic::{AtomicBool, Ordering},
