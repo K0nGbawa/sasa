@@ -154,6 +154,16 @@ impl AudioClip {
     }
 
     #[inline(always)]
+    pub fn to_vec(&self) -> Vec<f32> {
+        let mut vec = Vec::new();
+        for i in self.0.frames.iter() {
+            vec.push(i.0);
+            vec.push(i.1);
+        }
+        vec
+    }
+
+    #[inline(always)]
     pub fn sample_rate(&self) -> u32 {
         self.0.sample_rate
     }
