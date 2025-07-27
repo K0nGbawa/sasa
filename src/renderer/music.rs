@@ -1,16 +1,17 @@
 use crate::{buffer_is_full, AudioClip, Frame, Renderer};
 use anyhow::{Context, Result};
+use atomic_float::AtomicF64;
 use ringbuf::{HeapConsumer, HeapProducer, HeapRb};
 use std::sync::{
-    atomic::{AtomicBool, AtomicU32, Ordering},
+    atomic::{AtomicBool, Ordering},
     Arc, Weak,
 };
 
 #[derive(Debug, Clone)]
 pub struct MusicParams {
-    pub loop_mix_time: f32,
+    pub loop_mix_time: f64,
     pub amplifier: f32,
-    pub playback_rate: f32,
+    pub playback_rate: f64,
     pub command_buffer_size: usize,
 }
 impl Default for MusicParams {
@@ -25,13 +26,13 @@ impl Default for MusicParams {
 }
 
 struct SharedState {
-    position: AtomicU32, // float in bits
+    position: AtomicF64,
     paused: AtomicBool,
 }
 impl Default for SharedState {
     fn default() -> Self {
         Self {
-            position: AtomicU32::default(),
+            position: AtomicF64::default(),
             paused: AtomicBool::new(true),
         }
     }
@@ -41,10 +42,10 @@ enum MusicCommand {
     Pause,
     Resume,
     SetAmplifier(f32),
-    SeekTo(f32),
+    SeekTo(f64),
     SetLowPass(f32),
-    FadeIn(f32),
-    FadeOut(f32),
+    FadeIn(f64),
+    FadeOut(f64),
 }
 pub(crate) struct MusicRenderer {
     clip: AudioClip,
@@ -87,7 +88,7 @@ impl MusicRenderer {
                     self.settings.amplifier = amp;
                 }
                 MusicCommand::SeekTo(position) => {
-                    self.index = (position * sample_rate as f32 / self.settings.playback_rate)
+                    self.index = (position * sample_rate as f64 / self.settings.playback_rate)
                         .round() as usize;
                 }
                 MusicCommand::SetLowPass(low_pass) => {
@@ -100,11 +101,11 @@ impl MusicRenderer {
                             state.paused.store(false, Ordering::SeqCst);
                         }
                     }
-                    self.fade_time = (time * sample_rate as f32).round() as _;
+                    self.fade_time = (time * sample_rate as f64).round() as _;
                     self.fade_current = 0;
                 }
                 MusicCommand::FadeOut(time) => {
-                    self.fade_time = (-time * sample_rate as f32).round() as _;
+                    self.fade_time = (-time * sample_rate as f64).round() as _;
                     self.fade_current = 0;
                 }
             }
@@ -112,7 +113,7 @@ impl MusicRenderer {
     }
 
     #[inline]
-    fn frame(&mut self, position: f32, delta: f32) -> Option<Frame> {
+    fn frame(&mut self, position: f64, delta: f64) -> Option<Frame> {
         let s = &self.settings;
         if let Some(mut frame) = self.clip.sample(position) {
             if s.loop_mix_time >= 0. {
@@ -163,8 +164,8 @@ impl MusicRenderer {
     }
 
     #[inline]
-    fn position(&self, delta: f32) -> f32 {
-        self.index as f32 * delta
+    fn position(&self, delta: f64) -> f64 {
+        self.index as f64 * delta
     }
 
     #[inline(always)]
@@ -185,7 +186,7 @@ impl Renderer for MusicRenderer {
             let delta = 1. / sample_rate as f64 * self.settings.playback_rate as f64;
             let mut position = self.index as f64 * delta;
             for sample in data.iter_mut() {
-                if let Some(frame) = self.frame(position as f32, delta as f32) {
+                if let Some(frame) = self.frame(position, delta) {
                     *sample += self.update_and_get(frame).avg();
                 } else {
                     break;
@@ -195,7 +196,7 @@ impl Renderer for MusicRenderer {
             if let Some(state) = self.state.upgrade() {
                 state
                     .position
-                    .store(self.position(delta as f32).to_bits(), Ordering::SeqCst);
+                    .store(self.position(delta), Ordering::SeqCst);
             }
         }
     }
@@ -206,7 +207,7 @@ impl Renderer for MusicRenderer {
             let delta = 1. / sample_rate as f64 * self.settings.playback_rate as f64;
             let mut position = self.index as f64 * delta;
             for sample in data.chunks_exact_mut(2) {
-                if let Some(frame) = self.frame(position as f32, delta as f32) {
+                if let Some(frame) = self.frame(position, delta) {
                     let frame = self.update_and_get(frame);
                     sample[0] += frame.0;
                     sample[1] += frame.1;
@@ -218,7 +219,7 @@ impl Renderer for MusicRenderer {
             if let Some(state) = self.state.upgrade() {
                 state
                     .position
-                    .store(self.position(delta as f32).to_bits(), Ordering::SeqCst);
+                    .store(self.position(delta), Ordering::SeqCst);
             }
         }
     }
@@ -274,7 +275,7 @@ impl Music {
             .context("set amplifier")
     }
 
-    pub fn seek_to(&mut self, position: f32) -> Result<()> {
+    pub fn seek_to(&mut self, position: f64) -> Result<()> {
         self.prod
             .push(MusicCommand::SeekTo(position))
             .map_err(buffer_is_full)
@@ -288,21 +289,21 @@ impl Music {
             .context("set low pass")
     }
 
-    pub fn fade_in(&mut self, time: f32) -> Result<()> {
+    pub fn fade_in(&mut self, time: f64) -> Result<()> {
         self.prod
             .push(MusicCommand::FadeIn(time))
             .map_err(buffer_is_full)
             .context("fade in")
     }
 
-    pub fn fade_out(&mut self, time: f32) -> Result<()> {
+    pub fn fade_out(&mut self, time: f64) -> Result<()> {
         self.prod
             .push(MusicCommand::FadeOut(time))
             .map_err(buffer_is_full)
             .context("fade out")
     }
 
-    pub fn position(&self) -> f32 {
-        f32::from_bits(self.arc.position.load(Ordering::SeqCst))
+    pub fn position(&self) -> f64 {
+        self.arc.position.load(Ordering::SeqCst)
     }
 }

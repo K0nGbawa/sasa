@@ -16,7 +16,7 @@ impl Default for PlaySfxParams {
 pub(crate) struct SfxRenderer {
     clip: AudioClip,
     arc: Weak<()>,
-    cons: HeapConsumer<(f32, PlaySfxParams)>,
+    cons: HeapConsumer<(f64, PlaySfxParams)>,
 }
 
 impl Renderer for SfxRenderer {
@@ -25,7 +25,7 @@ impl Renderer for SfxRenderer {
     }
 
     fn render_mono(&mut self, sample_rate: u32, data: &mut [f32]) {
-        let delta = 1. / sample_rate as f32;
+        let delta = 1. / sample_rate as f64;
         let mut pop_count = 0;
         for (position, params) in self.cons.iter_mut() {
             for sample in data.iter_mut() {
@@ -44,7 +44,7 @@ impl Renderer for SfxRenderer {
     }
 
     fn render_stereo(&mut self, sample_rate: u32, data: &mut [f32]) {
-        let delta = 1. / sample_rate as f32;
+        let delta = 1. / sample_rate as f64;
         let mut pop_count = 0;
         for (position, params) in self.cons.iter_mut() {
             for sample in data.chunks_exact_mut(2) {
@@ -66,7 +66,7 @@ impl Renderer for SfxRenderer {
 
 pub struct Sfx {
     _arc: Arc<()>,
-    prod: HeapProducer<(f32, PlaySfxParams)>,
+    prod: HeapProducer<(f64, PlaySfxParams)>,
 }
 impl Sfx {
     pub(crate) fn new(clip: AudioClip, buffer_size: Option<usize>) -> (Sfx, SfxRenderer) {
