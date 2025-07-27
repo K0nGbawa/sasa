@@ -75,7 +75,7 @@ impl Backend for CpalBackend {
                     mixer.render_mono(data);
                     let ts = info.timestamp();
                     if let Some(delay) = ts.playback.duration_since(&ts.callback) {
-                        rec.push(delay.as_secs_f32());
+                        rec.push(delay.as_secs_f64());
                     }
                 },
                 error_callback,
@@ -89,7 +89,7 @@ impl Backend for CpalBackend {
                     mixer.render_stereo(data);
                     let ts = info.timestamp();
                     if let Some(delay) = ts.playback.duration_since(&ts.callback) {
-                        rec.push(delay.as_secs_f32());
+                        rec.push(delay.as_secs_f64());
                     }
                 },
                 error_callback,

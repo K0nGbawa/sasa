@@ -1,5 +1,6 @@
 /// Simple And Stupid Audio for Rust, optimized for low latency.
 pub mod backend;
+use atomic_float::AtomicF64;
 pub use backend::Backend;
 
 mod clip;
@@ -16,7 +17,7 @@ use ringbuf::{HeapProducer, HeapRb};
 use std::{
     ops::{Add, Mul},
     sync::{
-        atomic::{AtomicU32, Ordering},
+        atomic::Ordering,
         Arc,
     },
 };
@@ -57,15 +58,15 @@ impl Mul<f32> for Frame {
 const LATENCY_RECORD_NUM: usize = 640;
 
 pub struct LatencyRecorder {
-    records: [f32; LATENCY_RECORD_NUM],
+    records: [f64; LATENCY_RECORD_NUM],
     head: usize,
-    sum: f32,
+    sum: f64,
     full: bool,
-    result: Arc<AtomicU32>,
+    result: Arc<AtomicF64>,
 }
 
 impl LatencyRecorder {
-    pub fn new(result: Arc<AtomicU32>) -> Self {
+    pub fn new(result: Arc<AtomicF64>) -> Self {
         Self {
             records: [0.; LATENCY_RECORD_NUM],
             head: 0,
@@ -75,7 +76,7 @@ impl LatencyRecorder {
         }
     }
 
-    pub fn push(&mut self, record: f32) {
+    pub fn push(&mut self, record: f64) {
         let place = &mut self.records[self.head];
         self.sum += record - *place;
         *place = record;
@@ -85,13 +86,12 @@ impl LatencyRecorder {
             self.head = 0;
         }
         self.result.store(
-            (self.sum
+            self.sum
                 / (if self.full {
                     LATENCY_RECORD_NUM
                 } else {
                     self.head.max(1)
-                }) as f32)
-                .to_bits(),
+                }) as f64,
             Ordering::SeqCst,
         );
     }
@@ -99,7 +99,7 @@ impl LatencyRecorder {
 
 pub struct AudioManager {
     backend: Box<dyn Backend>,
-    latency: Arc<AtomicU32>,
+    latency: Arc<AtomicF64>,
     prod: HeapProducer<MixerCommand>,
 }
 
@@ -110,7 +110,7 @@ impl AudioManager {
 
     pub fn new_box(mut backend: Box<dyn Backend>) -> Result<Self> {
         let (prod, cons) = HeapRb::new(16).split();
-        let latency = Arc::default();
+        let latency: Arc<AtomicF64> = Arc::default();
         let latency_rec = LatencyRecorder::new(Arc::clone(&latency));
         backend.setup(BackendSetup {
             mixer_cons: cons,
@@ -144,8 +144,8 @@ impl AudioManager {
         Ok(())
     }
 
-    pub fn estimate_latency(&self) -> f32 {
-        f32::from_bits(self.latency.load(Ordering::SeqCst))
+    pub fn estimate_latency(&self) -> f64 {
+        self.latency.load(Ordering::SeqCst)
     }
 
     #[inline(always)]

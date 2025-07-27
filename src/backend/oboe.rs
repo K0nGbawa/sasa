@@ -107,7 +107,7 @@ impl AudioOutputCallback for OboeCallback {
 
         let (mixer, rec) = self.state.get();
         if let Ok(latency) = stream.calculate_latency_millis() {
-            rec.push((latency / 1000.) as f32);
+            rec.push(latency / 1000.);
         }
         mixer.sample_rate = stream.get_sample_rate() as u32;
         let raw = frames.as_mut_ptr();
