@@ -3,7 +3,7 @@ name = "sasa"
 version = "0.1.0"
 edition = "2021"
 
-[target.'cfg(not(target_os = "macos"))'.lib]
+[target.'cfg(not(target_os = "ios"))'.lib]
 crate-type = ["cdylib"]
 
 [target.'cfg(target_os = "ios")'.lib]
