@@ -1,0 +1,36 @@
+name: Build Rust macOS Static Library
+
+on:
+    push:
+        branches: [ main ]
+    pull_request:
+        branches: [ main ]
+
+jobs:
+    build-macos-static-lib:
+        runs-on: macos-latest
+
+        steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+
+        - name: Install Rust
+          uses: actions-rs/toolchain@v1
+          with:
+            toolchain: stable
+            profile: minimal
+            override: true
+            target: x86_64-apple-darwin
+
+        - name: Build static library
+          run: cargo build --release --target x86_64-apple-darwin
+
+        - name: Find static library
+          run: |
+            find target/x86_64-apple-darwin/release -name "*.a"
+
+        - name: Upload static library artifact
+          uses: actions/upload-artifact@v4
+          with:
+            name: macos-static-lib
+            path: target/x86_64-apple-darwin/release/*.a
