@@ -6,7 +6,7 @@ edition = "2021"
 [target.'cfg(not(target_os = "macos"))'.lib]
 crate-type = ["cdylib"]
 
-[target.'cfg(target_os = "macos")'.lib]
+[target.'cfg(target_os = "ios")'.lib]
 crate-type = ["staticlib"]
 
 [features]
