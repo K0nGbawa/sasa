@@ -1,36 +1,36 @@
-name: Build Rust macOS Static Library
+name: Build Rust iOS Static Library
 
 on:
-    push:
-        branches: [ main ]
-    pull_request:
-        branches: [ main ]
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-    build-macos-static-lib:
-        runs-on: macos-latest
+  build-ios-static-lib:
+    runs-on: macos-latest  # 必须用 macOS（iOS 交叉编译需要 Xcode 工具链）
 
-        steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-        - name: Install Rust
-          uses: actions-rs/toolchain@v1
-          with:
-            toolchain: stable
-            profile: minimal
-            override: true
-            target: x86_64-apple-darwin
+      - name: Install Rust toolchain with iOS target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+          components: rust-std  # 确保标准库可用（通常默认包含）
 
-        - name: Build static library
-          run: cargo build --release --target x86_64-apple-darwin
+      - name: Build static library for iOS (ARM64)
+        run: cargo build --release --target aarch64-apple-ios
 
-        - name: Find static library
-          run: |
-            find target/x86_64-apple-darwin/release -name "*.a"
+      - name: Verify static library exists
+        run: |
+          ls -l target/aarch64-apple-ios/release/
+          find target/aarch64-apple-ios/release -name "*.a" -type f
 
-        - name: Upload static library artifact
-          uses: actions/upload-artifact@v4
-          with:
-            name: macos-static-lib
-            path: target/x86_64-apple-darwin/release/*.a
+      - name: Upload static library artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-aarch64-static-lib
+          path: target/aarch64-apple-ios/release/*.a
+          if-no-files-found: error  # 如果没找到 .a 文件则失败
