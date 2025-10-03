@@ -3,8 +3,11 @@ name = "sasa"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
+[target.'cfg(not(target_os = "macos"))'.lib]
 crate-type = ["cdylib"]
+
+[target.'cfg(target_os = "macos")'.lib]
+crate-type = ["staticlib"]
 
 [features]
 cpal = ["dep:cpal"]
