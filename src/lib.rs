@@ -15,11 +15,10 @@ use crate::{backend::BackendSetup, mixer::MixerCommand};
 use anyhow::{anyhow, Context, Result};
 use ringbuf::{HeapProducer, HeapRb};
 use std::{
-    ops::{Add, Mul},
-    sync::{
+    ffi::{c_char, CStr}, ops::{Add, Mul}, slice, sync::{
         atomic::Ordering,
         Arc,
-    },
+    }
 };
 
 fn buffer_is_full<E>(_: E) -> anyhow::Error {
@@ -164,5 +163,219 @@ impl AudioManager {
         } else {
             Ok(())
         }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn create_audio_manager() -> *mut AudioManager {
+    #[cfg(all(not(feature="cpal"), not(feature="oboe")))]
+    return std::ptr::null_mut();
+    #[cfg(feature="cpal")]
+    {
+        let settings = backend::cpal::CpalSettings::default();
+        let backend = Box::new(backend::cpal::CpalBackend::new(settings));
+        match AudioManager::new_box(backend){
+            Ok(manager) => Box::into_raw(Box::new(manager)),
+            Err(_) => std::ptr::null_mut(),
+        }
+    }
+    #[cfg(feature="oboe")]
+    {
+        let settings = backend::oboe::OboeSettings {
+            performance_mode: backend::oboe::PerformanceMode::LowLatency,
+            ..Default::default()
+        };
+        let backend = Box::new(backend::oboe::OboeBackend::new(settings));
+        match AudioManager::new_box(backend) {
+            Ok(manager) => Box::into_raw(Box::new(manager)),
+            Err(_) => std::ptr::null_mut(),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn recover_if_needed(manager_ptr: *mut AudioManager) -> bool {
+    if manager_ptr.is_null() {
+        return false;
+    }
+    let manager = unsafe { match manager_ptr.as_mut() {
+            Some(manager) => manager,
+            None => return false,
+        }
+    };
+    manager.recover_if_needed().is_ok()
+}
+
+#[no_mangle]
+pub extern "C" fn load_audio_clip(path: *const c_char) -> *mut AudioClip {
+    if path.is_null() {
+        return std::ptr::null_mut();
+    }
+    let path = unsafe { CStr::from_ptr(path) };
+    match std::fs::read(path.to_str().unwrap()) {
+        Ok(data) => {
+            match AudioClip::new(data) {
+                Ok(clip) => Box::into_raw(Box::new(clip)),
+                Err(_) => std::ptr::null_mut(),
+            }
+        }
+        _ => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn load_audio_clip_from_buffer(data: *const u8, size: usize) -> *mut AudioClip {
+    if data.is_null() {
+        return std::ptr::null_mut();
+    }
+    let data = unsafe { slice::from_raw_parts(data, size) };
+    match AudioClip::new(data.to_vec()) {
+        Ok(clip) => Box::into_raw(Box::new(clip)), 
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn create_sfx(manager_ptr: *mut AudioManager, clip_ptr: *mut AudioClip) -> *mut Sfx {
+    if manager_ptr.is_null() || clip_ptr.is_null() {
+        return std::ptr::null_mut();
+    }
+    let manager = unsafe { manager_ptr.as_mut().unwrap() };
+    let clip = unsafe { &*clip_ptr };
+    match manager.create_sfx(clip.clone(), Some(1024)) {
+        Ok(sfx) => {
+            Box::into_raw(Box::new(sfx))
+        },
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn create_music(manager_ptr: *mut AudioManager, clip_ptr: *mut AudioClip, playback_rate: f64) -> *mut Music {
+    if manager_ptr.is_null() || clip_ptr.is_null() {
+        return std::ptr::null_mut();
+    }
+    let manager = unsafe { manager_ptr.as_mut().unwrap() };
+    let clip = unsafe { &*clip_ptr };
+    let params = MusicParams {
+        playback_rate,
+        ..Default::default()
+    };
+    match manager.create_music(clip.clone(), params) {
+        Ok(music) => {
+            Box::into_raw(Box::new(music))
+        },
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn play_sfx(sfx_ptr: *mut Sfx, volume: f32) -> bool {
+    if sfx_ptr.is_null() {
+        return false;
+    }
+    let sfx = unsafe { sfx_ptr.as_mut().unwrap() };
+    sfx.play(PlaySfxParams { amplifier: volume }).is_ok()
+}
+
+#[no_mangle]
+pub extern "C" fn play_music(music_ptr: *mut Music, volume: f32) -> bool {
+    if music_ptr.is_null() {
+        return false;
+    }
+    let music = unsafe { music_ptr.as_mut().unwrap() };
+    match music.set_amplifier(volume) {
+        Ok(_) => music.play().is_ok(),
+        Err(_) => false,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn pause_music(music_ptr: *mut Music) -> bool {
+    if music_ptr.is_null() {
+        return false;
+    }
+    let music = unsafe { music_ptr.as_mut().unwrap() };
+    music.pause().is_ok()
+}
+
+#[no_mangle]
+pub extern "C" fn is_music_paused(music_ptr: *mut Music) -> bool {
+    if music_ptr.is_null() {
+        return true;
+    }
+    let music = unsafe { music_ptr.as_mut().unwrap() };
+    music.paused()
+}
+
+#[no_mangle]
+pub extern "C" fn seek_music(music_ptr: *mut Music, time: f64) -> bool {
+    if music_ptr.is_null() {
+        return false;
+    }
+    let music = unsafe { music_ptr.as_mut().unwrap() };
+    music.seek_to(time).is_ok()
+}
+
+#[no_mangle]
+pub extern "C" fn set_music_volume(music_ptr: *mut Music, volume: f32) -> bool {
+    if music_ptr.is_null() {
+        return false;
+    }
+    let music = unsafe { music_ptr.as_mut().unwrap() };
+    music.set_amplifier(volume).is_ok()
+}
+
+#[no_mangle]
+pub extern "C" fn get_music_position(music_ptr: *mut Music) -> f64 {
+    if music_ptr.is_null() {
+        return 0.0;
+    }
+    let music = unsafe { music_ptr.as_mut().unwrap() };
+    music.position()
+}
+
+#[no_mangle]
+pub extern "C" fn get_audio_clip_duration(clip_ptr: *mut AudioClip) -> f64 {
+    if clip_ptr.is_null() {
+        return 0.0;
+    }
+    let clip = unsafe { &*clip_ptr };
+    clip.length()
+}
+
+#[no_mangle]
+pub extern "C" fn destroy_manager(manager_ptr: *mut AudioManager) {
+    if !manager_ptr.is_null() {
+        unsafe {
+            let _ = Box::from_raw(manager_ptr);
+        };
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn destroy_clip(clip_ptr: *mut AudioClip) {
+    if !clip_ptr.is_null() {
+        unsafe {
+            let _ = Box::from_raw(clip_ptr);
+        };
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn destroy_sfx(sfx_ptr: *mut Sfx) {
+    if !sfx_ptr.is_null() {
+        unsafe {
+            let _ = Box::from_raw(sfx_ptr);
+        };
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn destroy_music(music_ptr: *mut Music) {
+    if !music_ptr.is_null() {
+        unsafe {
+            let _ = Box::from_raw(music_ptr);
+        };
     }
 }
